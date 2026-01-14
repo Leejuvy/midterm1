@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Portal | Photo & Search</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .table thead { background-color: #4f46e5; color: white; }
+        .profile-preview { width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 3px solid #4f46e5; }
+        .editing-row { background-color: #eef2ff !important; border-left: 5px solid #4f46e5; }
+    </style>
+</head>
+<body>
+
+<div class="container py-5">
+    <div class="row">
+        <div class="col-lg-4 mb-4">
+            <div class="card p-4">
+                <h4 class="fw-bold mb-3" id="formTitle">Register Student</h4>
+                <form id="studentForm">
+                    <input type="hidden" id="editIndex" value="-1">
+                    
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">ID Number</label>
+                        <input type="text" id="idNum" class="form-control bg-light" readonly placeholder="Auto-ID">
+                    </div>
+
+                    <div class="mb-3 text-center d-none" id="currentPhotoContainer">
+                        <img id="formPhotoPreview" src="" class="profile-preview mb-2">
+                        <p class="small text-muted">Current Photo</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Upload Profile Picture</label>
+                        <input type="file" id="studentPhoto" class="form-control" accept="image/*">
+                    </div>
+
+                    <div class="mb-2">
+                        <input type="text" id="lastName" class="form-control" placeholder="Last Name" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" id="firstName" class="form-control" placeholder="First Name" required>
+                    </div>
+                    <div class="mb-3">
+                        <input type="text" id="middleName" class="form-control" placeholder="Middle Name">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Birthdate</label>
+                        <input type="date" id="birthdate" class="form-control" required>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-7">
+                            <select id="course" class="form-select" required>
+                                <option value="" disabled selected>Course</option>
+                                <option value="BSCS">BSCS</option>
+                                <option value="BSIT">BSIT</option>
+                                <option value="BSCPE">BSCPE</option>
+                            </select>
+                        </div>
+                        <div class="col-5">
+                            <input type="number" id="yearLevel" class="form-control" placeholder="Year" min="1" max="5" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="submitBtn" class="btn btn-primary w-100 fw-bold shadow">Add Student</button>
+                    <button type="button" onclick="resetForm()" class="btn btn-link w-100 text-muted mt-2">Clear Form</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="mb-3 shadow-sm">
+                <input type="text" id="searchInput" class="form-control p-3" placeholder="🔍 Search name or course..." onkeyup="renderTable()">
+            </div>
+
+            <div class="card overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-3">ID</th>
+                                <th>Name</th>
+                                <th>Age</th>
+                                <th>Course</th>
+                                <th class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="viewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold">Student Profile</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-5 text-center" id="viewDetails"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    // Global Data
+    let students = JSON.parse(localStorage.getItem('studentPortalData')) || [];
+    const viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
+
+    // Utility: Age Calculator
+    const calculateAge = (dob) => {
+        if(!dob) return 0;
+        const diff = Date.now() - new Date(dob).getTime();
+        return Math.abs(new Date(diff).getUTCFullYear() - 1970);
+    };
+
+    // Utility: Image to Base64
+    const getBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+    };
+
+    // Form Submission
+    document.getElementById('studentForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const editIndex = document.getElementById('editIndex').value;
+        const dob = document.getElementById('birthdate').value;
+        const age = calculateAge(dob);
+
+        // 1. AGE CHECK
+        if (age < 18) {
+            alert("🚨 Registration Failed: Student must be 18+ years old.");
+            return;
+        }
+
+        const fName = document.getElementById('firstName').value.trim();
+        const lName = document.getElementById('lastName').value.trim();
+
+        // 2. DUPLICATE CHECK
+        const isDuplicate = students.some((s, idx) => 
+            idx != editIndex && 
+            s.firstName.toLowerCase() === fName.toLowerCase() && 
+            s.lastName.toLowerCase() === lName.toLowerCase()
+        );
+
+        if (isDuplicate) {
+            alert("⚠️ Name already exists in the system.");
+            return;
+        }
+
+        // 3. HANDLE PHOTO
+        let photoData = "";
+        const photoFile = document.getElementById('studentPhoto').files[0];
+        if (photoFile) {
+            photoData = await getBase64(photoFile);
+        } else if (editIndex !== "-1") {
+            photoData = students[editIndex].photo; 
+        }
+
+        const studentObj = {
+            id: document.getElementById('idNum').value || "STU-" + Math.floor(1000 + Math.random() * 9000),
+            firstName: fName,
+            lastName: lName,
+            middleName: document.getElementById('middleName').value.trim(),
+            birthdate: dob,
+            course: document.getElementById('course').value,
+            yearLevel: document.getElementById('yearLevel').value,
+            photo: photoData
+        };
+
+        if (editIndex === "-1") {
+            students.push(studentObj);
+        } else {
+            students[editIndex] = studentObj;
+        }
+
+        saveData();
+        resetForm();
+    });
+
+    // Render Table
+    function renderTable() {
+        const tableBody = document.getElementById('studentTableBody');
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const editIdx = document.getElementById('editIndex').value;
+        
+        tableBody.innerHTML = "";
+        
+        // Sort A-Z by Last Name
+        students.sort((a, b) => a.lastName.localeCompare(b.lastName));
+
+        const filtered = students.filter(s => 
+            s.lastName.toLowerCase().includes(search) || 
+            s.firstName.toLowerCase().includes(search) ||
+            s.course.toLowerCase().includes(search)
+        );
+
+        filtered.forEach((s) => {
+            const realIdx = students.findIndex(item => item.id === s.id);
+            const age = calculateAge(s.birthdate);
+            const isEditing = editIdx == realIdx ? 'editing-row' : '';
+
+            tableBody.innerHTML += `
+                <tr class="align-middle ${isEditing}">
+                    <td class="ps-3 fw-bold text-muted small">${s.id}</td>
+                    <td class="fw-semibold">
+                        ${s.photo ? `<img src="${s.photo}" width="30" height="30" class="rounded-circle me-2" style="object-fit:cover;">` : ''}
+                        ${s.lastName}, ${s.firstName}
+                    </td>
+                    <td><span class="badge bg-light text-dark border">${age} yrs</span></td>
+                    <td>${s.course}</td>
+                    <td class="text-center">
+                        <div class="btn-group shadow-sm">
+                            <button class="btn btn-sm btn-outline-primary" onclick="viewStudent(${realIdx})">View</button>
+                            <button class="btn btn-sm btn-outline-warning" onclick="editStudent(${realIdx})">Edit</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteStudent(${realIdx})">Del</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    // View Profile
+    function viewStudent(index) {
+        const s = students[index];
+        const age = calculateAge(s.birthdate);
+        const photo = s.photo ? `<img src="${s.photo}" class="profile-preview mb-3 shadow">` : `<div class="display-1 mb-3">👤</div>`;
+
+        document.getElementById('viewDetails').innerHTML = `
+            ${photo}
+            <h3 class="fw-bold mb-1">${s.firstName} ${s.lastName}</h3>
+            <p class="text-primary fw-bold mb-4">${s.course} - Year ${s.yearLevel}</p>
+            <div class="row border-top pt-3">
+                <div class="col-6"><strong>Birthdate:</strong><br>${s.birthdate}</div>
+                <div class="col-6"><strong>Age:</strong><br>${age} Years Old</div>
+            </div>
+        `;
+        viewModal.show();
+    }
+
+    // Edit Record
+    function editStudent(index) {
+        const s = students[index];
+        document.getElementById('editIndex').value = index;
+        document.getElementById('idNum').value = s.id;
+        document.getElementById('lastName').value = s.lastName;
+        document.getElementById('firstName').value = s.firstName;
+        document.getElementById('middleName').value = s.middleName;
+        document.getElementById('birthdate').value = s.birthdate;
+        document.getElementById('course').value = s.course;
+        document.getElementById('yearLevel').value = s.yearLevel;
+
+        if (s.photo) {
+            document.getElementById('currentPhotoContainer').classList.remove('d-none');
+            document.getElementById('formPhotoPreview').src = s.photo;
+        } else {
+            document.getElementById('currentPhotoContainer').classList.add('d-none');
+        }
+
+        document.getElementById('formTitle').innerText = "Update Record";
+        document.getElementById('submitBtn').innerText = "Update Student";
+        document.getElementById('submitBtn').className = "btn btn-success w-100 fw-bold";
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        renderTable();
+    }
+
+    // Delete Record
+    function deleteStudent(index) {
+        if (confirm("Permanently delete this student?")) {
+            students.splice(index, 1);
+            saveData();
+        }
+    }
+
+    // Storage & Reset
+    function saveData() {
+        localStorage.setItem('studentPortalData', JSON.stringify(students));
+        renderTable();
+    }
+
+    function resetForm() {
+        document.getElementById('studentForm').reset();
+        document.getElementById('editIndex').value = "-1";
+        document.getElementById('idNum').value = "";
+        document.getElementById('formTitle').innerText = "Register Student";
+        document.getElementById('submitBtn').innerText = "Add Student";
+        document.getElementById('submitBtn').className = "btn btn-primary w-100 fw-bold";
+        document.getElementById('currentPhotoContainer').classList.add('d-none');
+        renderTable();
+    }
+
+    // Initial Load
+    renderTable();
+</script>
+
+</body>
+</html>
